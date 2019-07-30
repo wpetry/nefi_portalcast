@@ -6,10 +6,14 @@
 library(portalr)
 library(tidyverse)
 library(rjags)
+library(ggplot2)
 library(coda)
 #################################################-
 ## Get & subset data to Dipodymus ----
 #################################################-
+
+## learning to use git
+
 data <- abundance(getwd()) %>%
   as_tibble()
 
