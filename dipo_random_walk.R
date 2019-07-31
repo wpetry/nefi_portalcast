@@ -11,9 +11,6 @@ library(coda)
 #################################################-
 ## Get & subset data to Dipodymus ----
 #################################################-
-
-## learning to use git
-
 data <- abundance(getwd()) %>%
   as_tibble()
 
