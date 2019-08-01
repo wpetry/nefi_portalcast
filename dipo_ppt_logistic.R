@@ -90,6 +90,11 @@ model{
   R ~ dgamma(0.01, 0.00000001) ## Observation error precision
   Q ~ dgamma(0.01, 0.00000001) ## Process errror precision 
 
+  ## initial conditions, s = site
+  for(s in 1:NS){
+    lN[s, 1] ~ dnorm(6, 0.001)           ## prior on IC, log scale
+    N[s, 1] <- exp(lN[s, 1])             ## IC, linear scale
+  }
 
   ## process model, t = time, s = site
   for(t in 2:NT){
@@ -102,24 +107,24 @@ model{
       mu[s, t] <- log(max(1, N[s, t - 1] + r_global * N[s, t - 1] * (1 - N[s, t - 1] / K[s, t])))
 
       ## process error
-      lN[s, t] ~ dnorm(mu[s, t], Q[])
+      lN[s, t] ~ dnorm(mu[s, t], Q)
       N[s, t] <- exp(lN[s, t])
     }
   }
   ## observation model
   for(t in 1:NT){
     for(s in 1:NS){
-      No[s, t] ~ dlnorm(lN[s, t], R[])
+      No[s, t] ~ dlnorm(lN[s, t], R)
     }
   }
 }
 "
 
-
 jags_dat <- merged_dat %>%
   select(No = DM, precip = precipitation) %>%
-  #mutate(site = 1) %>%
+  mutate(alpha_site = 1) %>%
   as.list()
+jags_dat$No <- t(as.matrix(jags_dat$No))
 jags_dat$NT <- length(jags_dat[["No"]])
 jags_dat$NS <- 1
 
@@ -128,6 +133,12 @@ jags_model <- jags.model(textConnection(logisticRE),
                          data = jags_dat,
                          n.chains = 3)
 
+# sample that shit!!!
+jags_samps <- coda.samples(jags_model,
+                           variable.names = c("No", "K_global",
+                                              "r_global",
+                                              "beta"),
+                           n.iter = 5000)
 
 
 
