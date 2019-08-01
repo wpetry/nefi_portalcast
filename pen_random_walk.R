@@ -11,6 +11,7 @@ library(rEDM)
 library(portalr)
 library(dplyr)
 library(remotes)
+library(imputeTS)
 
 df.a=abundance(time="newmoon", clean=FALSE)
 temp=weather(level="newmoon", fill=TRUE)
@@ -31,7 +32,8 @@ df<-merge(df.a, temp, by="newmoonnumber", all=TRUE)
 str(df)
 head(df)
 df2<-subset(df, select=c("newmoonnumber","PP","DM","mintemp"))
-str(df2)
+df2$DM<-round(na_interpolation(df2$DM), digits=0)
+head(df2)
 
 ##FILL IN EMPTY PERIODS##
 
