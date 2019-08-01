@@ -2,15 +2,7 @@
 ############################################
 #VERSION 3
 
-install.packages('portalr')
-install.packages('remotes')
-remotes::install_github('ha0ye/rEDM')
-install.packages("rEDM")
-install.packages("devtools")
-install.packages("rjags")
-install.packages("Rcpp")
-install.packages("ggplot2")
-install.packages("usethis")
+
 library(ggplot2)
 library(Rcpp)
 library(devtools)
@@ -38,7 +30,7 @@ min(temp$newmoonnumber)
 df<-merge(df.a, temp, by="newmoonnumber", all=TRUE)
 str(df)
 head(df)
-df2<-subset(df, select=c("newmoonnumber","PP","mintemp"))
+df2<-subset(df, select=c("newmoonnumber","PP","DM","mintemp"))
 str(df2)
 
 ##FILL IN EMPTY PERIODS##
@@ -49,7 +41,7 @@ str(df3)
 df4<-merge(df2, df3, by="newmoonnumber", all=TRUE) 
 str(df4)
 
-dev.off()
+#dev.off()
 ggplot(df4, aes(x=newmoonnumber, y=PP))+geom_point()+geom_line()
 
 y = df4$PP
@@ -65,7 +57,7 @@ model{
   
 #### Process Model
   for(t in 2:n){
-    mu[t] <- x[t-1] + betaIntercept + betaTmin*temp[t-1]
+    mu[t] <- x[t-1] + betaIntercept + betaTmin*temp[t-1] + betaDM*dm[t-1]
     x[t]~dnorm(mu[t],tau_add)
   }
   
@@ -78,7 +70,8 @@ model{
   x[1] ~ dnorm(x_ic,tau_ic)
   tau_add ~ dgamma(a_add,r_add)
   betaIntercept~dnorm(0,0.001)
-  betaTmin~dnorm(0,0.001)  
+  betaTmin~dnorm(0,0.001)
+  betaDM~dnorm(0,0.001)
 }
 "
 
@@ -103,8 +96,10 @@ jags.out   <- coda.samples (model = j.model,
 plot(jags.out)
 
 jags.out   <- coda.samples (model = j.model,
-                            variable.names = c("x","tau_add"),
+                            variable.names = c("x","tau_add", "betaIntercept", "betaTmin"),
                             n.iter = 10000)
+
+plot(jags.out[,c("tau_add", "betaIntercept", "betaTmin")])
 
 newmoon.rng = c(1,length(newmoonnumber)) ## adjust to zoom in and out
 out <- as.matrix(jags.out)
