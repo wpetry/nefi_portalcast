@@ -9,6 +9,8 @@ library(tidyverse)
 library(rjags)
 library(coda)
 
+theme_set(theme_bw())
+
 ##` @param IC    Initial Conditions
 ##` @param r     Intrinsic growth rate
 ##` @param Kg    Across-site ('global') mean carrying capacity
@@ -18,21 +20,17 @@ library(coda)
 ##` @param Q     Process error (default = 0 for deterministic runs)
 ##` @param n     Size of Monte Carlo ensemble
 ##` @param NT    number of forecast timesteps
-forecastN <- function(IC,r,Kg,alpha,beta,ppt,Q=0,n=Nmc,NT){
-  N <- matrix(NA,n,NT)  ## storage
+forecastN <- function(IC, betaIntercept, betaTmin, mintemp,
+                      Q = 0, n = Nmc, NT){
+  N <- matrix(NA, n, NT)  ## storage
   Nprev <- IC           ## initialize
   for(t in 1:NT){
     mu <- Nprev + betaIntercept + betaTmin * mintemp[,t]
-    
-    # if(Q=0), mu
-    # if(Q!=0), rpois(n, mu)
-    
-    x[t]~dnorm(mu[t],tau_add)
-    
-    
-    K = pmax(1,Kg + alpha + beta*log(ppt[,t]/800))  ## calculate carrying capacity
-    mu = log(pmax(1,Nprev + r*Nprev*(1-Nprev/K)))   ## calculate mean
-    N[,t] <- rlnorm(n,mu,Q)                         ## predict next step
+    if (Q==0) {
+      N[, t] <- mu
+    } else {
+      N[, t] <- rpois(n, mu)
+    }
     Nprev <- N[,t]                                  ## update IC
   }
   return(N)
@@ -41,8 +39,14 @@ forecastN <- function(IC,r,Kg,alpha,beta,ppt,Q=0,n=Nmc,NT){
 #################################################-
 ## Get & subset data to Dipodymus ----
 #################################################-
-data <- abundance(getwd(), time = "newmoon",
-                  clean = FALSE) %>%
+data <- abundance(level = "plot",
+                  time = "newmoon",
+                  clean = FALSE,
+                  plots = "Longterm") %>% 
+  group_by(newmoonnumber, treatment) %>% 
+  summarize(DM = sum(DM), PP = sum(PP)) %>% 
+  data.frame() %>%
+  filter(treatment == "control") %>%
   as_tibble()
 
 ggplot(data, aes(x = newmoonnumber, y = DM))+
@@ -154,48 +158,87 @@ out$params <- mat2mcmc.list(mfit[, -pred.cols])
 #################################################-
 ## Make a deterministic forecast ----
 #################################################-
+NT <- 128
+
 # calculate the mean of the driver (tmin) and fitted model parameters
-tmin_mean <- mean(jags_dat$mintemp, na.rm = TRUE)
+tmin_mean <- rep(mean(jags_dat$mintemp, na.rm = TRUE), NT)
+tmin_mean <- matrix(apply(ppt_ensemble, 2, mean), 1, NT)
+
 ## parameters
 params <- as.matrix(out$params)
-param.mean <- apply(params, 2, mean)
+param_mean <- apply(params, 2, mean, na.rm = TRUE)
 ## initial conditions
 IC <- as.matrix(out$predict)
 
-N.det <- forecastN(IC = mean(IC[,"X[364]"]),
-                   betaIntercept = param.mean["betaIntercept"],
-                   betaTmin = param.mean["betaTmin"],
-                   tau_add = param.mean["betaIntercept"],
-                   mintemp = tmin_mean,
-                   Q=0,  ## process error off
-                   n=1)
-
-
-
-
-
-
-## calculate mean of all inputs
-ppt.mean <- matrix(apply(ppt_ensemble,2,mean),1,NT) ## driver
-## parameters
-params <- as.matrix(out$params)
-param.mean <- apply(params,2,mean)
-## initial conditions
-IC <- as.matrix(out$predict)
-
-N.det <- forecastN(IC=mean(IC[,"N[6,30]"]),
-                   r=param.mean["r_global"],
-                   Kg=param.mean["K_global"],
-                   alpha=param.mean["alpha_site[6]"],
-                   beta=param.mean["beta"],
-                   ppt=ppt.mean,
-                   Q=0,  ## process error off
-                   n=1)
+N_det_mean <- forecastN(IC = mean(IC[,"x[364]"], na.rm = TRUE),
+                        betaIntercept = param_mean["betaIntercept"],
+                        betaTmin = param_mean["betaTmin"],
+                        mintemp = tmin_mean,
+                        Q = 0,  ## process error off
+                        n = 1,
+                        NT = NT)
 
 ## Plot run
-plot.run()
-lines(time2,N.det,col="purple",lwd=3)
+plot(t(N_det_mean))
 
+#################################################-
+## Propogate errors ----
+#################################################-
+Nmc <- 1000
+
+## Initial conditions
+## sample parameter rows from previous analysis
+prow <- sample.int(nrow(params), Nmc, replace = TRUE)
+
+N_IC <- forecastN(IC = IC[prow,"x[364]"],
+                 betaIntercept = param_mean["betaIntercept"],
+                 betaTmin = param_mean["betaTmin"],
+                 mintemp = tmin_mean,
+                 Q = 0,  ## process error off
+                 n = Nmc,
+                 NT = NT)
+
+## Plot run
+N_IC_ci <- apply(N_IC, 2, quantile, c(0.025, 0.5, 0.975)) %>%
+  t() %>%
+  as_tibble() %>%
+  rename(q2.5 = `2.5%`, q50 = `50%`, q97.5 = `97.5%`) %>%
+  rownames_to_column("time") %>%
+  mutate(newmoonnumber = as.numeric(time) + 364)
+
+dipo_dat %>%
+  full_join(N_IC_ci, by = "newmoonnumber") %>%
+  ggplot(aes(x = newmoonnumber, y = DM)) +
+  geom_ribbon(aes(ymin = q2.5, ymax = q97.5,
+                                  x = newmoonnumber), fill = "blue") +
+  geom_line(size = 1.5)
+
+
+
+
+
+#################################################-
+## FC: Known, variable mintemp ----
+#################################################-
+tmin_obs <- jags_dat$mintemp[365:length(jags_dat$mintemp)]
+params <- as.matrix(out$params)
+param_mean <- apply(params, 2, mean, na.rm = TRUE)
+IC <- as.matrix(out$predict)
+
+N_det_obstmin <- forecastN(IC = mean(IC[,"x[364]"], na.rm = TRUE),
+                        betaIntercept = param_mean["betaIntercept"],
+                        betaTmin = param_mean["betaTmin"],
+                        mintemp = tmin_obs,
+                        Q = 0,  ## process error off
+                        n = 1,
+                        NT = NT)
+
+## Plot run
+dipo_dat %>%
+  bind_cols(tibble(forecast = c(rep(NA, 364), N_det_obstmin))) %>%
+  ggplot(aes(x = newmoonnumber, y = DM)) +
+  geom_line(size = 1.5) +
+  geom_line(aes(y = forecast), color = 'blue', size = 1.5) 
 
 
 
