@@ -10,6 +10,7 @@ library(dplyr)
 library(remotes)
 library(imputeTS)
 library(ggpubr)
+library(gridExtra)
 
 df.a = abundance(level="plot",
                  time="newmoon",
@@ -48,12 +49,26 @@ str(df4)
 #dev.off()
 ggplot(df4, aes(x=newmoonnumber, y=PP))+geom_point()+geom_line()
 
-tp<-ggplot(data=df4, aes(x=newmoonnumber, y=mintemp))+ geom_line()+xlab("")+ylab("Min. temp. (C)")
-pp<-ggplot(data=df4, aes(x=newmoonnumber, y=PP))+geom_line()+xlab("")+ylab("C. penicillatus")
-dm<-ggplot(data=df4, aes(x=newmoonnumber, y=DM))+geom_line()+xlab("Time")+ylab("D. merriami")
 
-ggarrange(tp, pp, dm + rremove("x.text"), 
+tp<-ggplot(data=df4, aes(x=newmoonnumber, y=mintemp))+ geom_line()+ylab("Min. temp. (C)")+  
+  theme(axis.title.x=element_blank(),axis.text.x=element_blank(), axis.ticks.x=element_blank())+ 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+pp<-ggplot(data=df4, aes(x=newmoonnumber, y=PP))+geom_line()+ylab("C. penicillatus")+  
+  theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank()) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  theme(axis.title.y = element_text(face = "italic"))
+
+dm<-ggplot(data=df4, aes(x=newmoonnumber, y=DM))+geom_line()+xlab("Time")+ylab("D. merriami")+ 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  theme(axis.title.y = element_text(face = "italic"))
+
+ggarrange(tp, pp, dm, 
           nrow = 3)
+
 
 y = df4$PP
 y2=df4$PP
