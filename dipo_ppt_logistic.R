@@ -23,12 +23,20 @@ forecastN <- function(IC,r,Kg,alpha,beta,ppt,Q=0,n=Nmc){
   N <- matrix(NA,n,NT)  ## storage
   Nprev <- IC           ## initialize
   for(t in 1:NT){
-    K = pmax(1,Kg + alpha + beta*log(ppt[,t]/800))  ## calculate carrying capacity
+    K = pmax(1,Kg + alpha + beta*log(ppt[,t]/23.70712))  ## calculate carrying capacity
     mu = log(pmax(1,Nprev + r*Nprev*(1-Nprev/K)))   ## calculate mean
     N[,t] <- rlnorm(n,mu,Q)                         ## predict next step
     Nprev <- N[,t]                                  ## update IC
   }
   return(N)
+}
+
+plot.run <- function(){
+  sel = seq(s,ncol(ci),by=NS)
+  plot(time,time,type='n',ylim=ylim,ylab="N")
+  ecoforecastR::ciEnvelope(time1,ci[1,sel],ci[3,sel],col=col.alpha("lightBlue",0.6))
+  lines(time1,ci[2,sel],col="blue")
+  points(time1,No[s,])
 }
 
 #################################################-
@@ -81,7 +89,8 @@ model{
   ## priors
   r_global ~ dnorm(0, 0.1)     ## across-site mean growth rate
   K_global ~ dlnorm(6, 0.01)   ## across-site mean carrying capacity
-  beta ~ dnorm(0, 0.000001)    ## slope of K response to precip
+  beta_1 ~ dnorm(0, 0.000001)    ## slope of K response to precip - current mo
+  beta_2 ~ dnorm(0, 0.000001)    ## slope of K response to precip - previous mo
   R ~ dgamma(0.01, 0.00000001) ## Observation error precision
   Q ~ dgamma(0.01, 0.00000001) ## Process errror precision 
 
@@ -96,7 +105,7 @@ model{
     for(s in 1:NS){
 
       ## K is a linear model with a site random effect and fixed effect on log(precip), centered on the long-run mean precipitation
-      K[s, t]  <- max(1, K_global + beta * log(precip[t] / 23.70712))  
+      K[s, t]  <- max(1, K_global + beta_1 * log(precip[t] / 23.70712) + beta_2 * log(precip[t - 1] / 23.70712))  
 
       ## standard logistic growth process model, logged     
       mu[s, t] <- log(max(1, N[s, t - 1] + r_global * N[s, t - 1] * (1 - N[s, t - 1] / K[s, t])))
@@ -132,7 +141,7 @@ jags_model <- jags.model(textConnection(logisticRE),
 jags_samps <- coda.samples(jags_model,
                            variable.names = c("No","N", "K_global",
                                               "r_global",
-                                              "beta"),
+                                              "beta_1", "beta_2"),
                            n.iter = 5000)
 
 
@@ -150,26 +159,43 @@ out$params <- mat2mcmc.list(mfit[, -pred.cols])
 
 Nmc <- 1000
 
+
+#################################################-
+## Make credible intervals & prediction intervals ----
+#################################################-
+# try again
+newmoon.rng = c(1,length(merged_dat$newmoonnumber)) ## adjust to zoom in and out
+out <- as.matrix(jags_samps)
+x.cols <- grep("^No",colnames(out)) ## grab all columns that start with the letter x
+ci <- apply(out[,x.cols],2,quantile,c(0.025,0.5,0.975)) 
+str(ci)
+
+plot(merged_dat$newmoonnumber,ci[2,],type='n',ylim=c(min(ci[1,]), max(ci[3,])),ylab="Abundance",xlim=c(1,500), log="y", xlab = "Time (months)")
+
+ecoforecastR::ciEnvelope(merged_dat$newmoonnumber,ci[1,],ci[3,],col=ecoforecastR::col.alpha("lightBlue",0.75))
+points(merged_dat$newmoonnumber,merged_dat$DM,pch="+",cex=1.5)
+points(dipo_dat$newmoonnumber,dipo_dat$DM,pch="+",cex=0.5)
+lines(merged_dat$newmoonnumber, ci[2,])
+
+#################################################-
+## Paritition errors [NOT RUN] ----
+#################################################-
 ## Initial conditions
 ## sample parameter rows from previous analysis
-prow <- sample.int(nrow(params), Nmc, replace = TRUE)
-
-## initial conditions
-IC <- as.matrix(out$predict)
-
-N_IC <- forecastN(IC = IC[prow,"x[364]"],
-                  r=params[prow,"r_global"],  ## sample parameters
-                  Kg=params[prow,"K_global"],
-                  alpha=0,
-                  beta=params[prow,"beta"],
-                  ppt=precip,
-                  Q=0,  ## process error off
-                  n=Nmc)
-
-## Plot run
-plot.run()
-lines(time2,N.det,col="purple",lwd=3)
-
-
-
-
+# prow <- sample.int(nrow(as.matrix(out$params)), Nmc, replace = TRUE)
+# 
+# ## initial conditions
+# IC <- as.matrix(out$predict)
+# 
+# N_IC <- forecastN(IC = IC[prow,"x[364]"],
+#                   r=params[prow,"r_global"],  ## sample parameters
+#                   Kg=params[prow,"K_global"],
+#                   alpha=0,
+#                   beta=params[prow,"beta"],
+#                   ppt=precip,
+#                   Q=0,  ## process error off
+#                   n=Nmc)
+# 
+# ## Plot run
+# plot.run()
+# lines(time2,N.det,col="purple",lwd=3)
