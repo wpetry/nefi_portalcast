@@ -161,8 +161,7 @@ out$params <- mat2mcmc.list(mfit[, -pred.cols])
 NT <- 128
 
 # calculate the mean of the driver (tmin) and fitted model parameters
-tmin_mean <- rep(mean(jags_dat$mintemp, na.rm = TRUE), NT)
-tmin_mean <- matrix(apply(ppt_ensemble, 2, mean), 1, NT)
+tmin_mean <- t(as.matrix(rep(mean(jags_dat$mintemp, na.rm = TRUE), NT)))
 
 ## parameters
 params <- as.matrix(out$params)
@@ -220,7 +219,7 @@ dipo_dat %>%
 #################################################-
 ## FC: Known, variable mintemp ----
 #################################################-
-tmin_obs <- jags_dat$mintemp[365:length(jags_dat$mintemp)]
+tmin_obs <- t(as.matrix(jags_dat$mintemp[365:length(jags_dat$mintemp)]))
 params <- as.matrix(out$params)
 param_mean <- apply(params, 2, mean, na.rm = TRUE)
 IC <- as.matrix(out$predict)
