@@ -142,7 +142,7 @@ jags_samps <- coda.samples(jags_model,
                            variable.names = c("No","N", "K_global",
                                               "r_global",
                                               "beta_1", "beta_2"),
-                           n.iter = 5000)
+                           n.iter = 10000)
 
 
 out <- list(params = NULL, predict = NULL, model = jags_model, 
@@ -154,11 +154,11 @@ pred.cols <- union(grep("N[", colnames(mfit), fixed = TRUE),
 chain.col <- which(colnames(mfit) == "CHAIN")
 
 out$predict <- mat2mcmc.list(mfit[, c(chain.col, pred.cols)])
-
 out$params <- mat2mcmc.list(mfit[, -pred.cols])
 
 Nmc <- 1000
 
+plot(jags_samps[,c("K_global","beta_1","beta_2")])
 
 #################################################-
 ## Make credible intervals & prediction intervals ----
@@ -170,7 +170,7 @@ x.cols <- grep("^No",colnames(out)) ## grab all columns that start with the lett
 ci <- apply(out[,x.cols],2,quantile,c(0.025,0.5,0.975)) 
 str(ci)
 
-plot(merged_dat$newmoonnumber,ci[2,],type='n',ylim=c(min(ci[1,]), max(ci[3,])),ylab="Abundance",xlim=c(1,500), log="y", xlab = "Time (months)")
+plot(merged_dat$newmoonnumber,ci[2,],type='n',ylim=c(min(ci[1,]), max(ci[3,])),ylab="Abundance",xlim=c(200,500), log="y", xlab = "Time (months)")
 
 ecoforecastR::ciEnvelope(merged_dat$newmoonnumber,ci[1,],ci[3,],col=ecoforecastR::col.alpha("lightBlue",0.75))
 points(merged_dat$newmoonnumber,merged_dat$DM,pch="+",cex=1.5)
